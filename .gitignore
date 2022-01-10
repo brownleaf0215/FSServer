@@ -1,2 +1,4 @@
-
-study_code/smith/.vs
+study_code/*/.vs
+study_code/*/*/.vs
+study_code/*/x64
+study_code/*/*/x64

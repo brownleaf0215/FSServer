@@ -1,20 +1,143 @@
-﻿// MemoryPool.cpp : 이 파일에는 'main' 함수가 포함됩니다. 거기서 프로그램 실행이 시작되고 종료됩니다.
-//
+﻿#include <iostream>
 
-#include <iostream>
-
-int main()
+template<class T>
+class MemoryPool
 {
-    std::cout << "Hello World!\n";
+public:
+	const static std::size_t SIZE = 100000;
+
+	MemoryPool()
+	{
+		for (auto i = 1; i < SIZE; ++i)
+		{
+			mPool[i - 1].mNext = &mPool[i];
+		}
+
+		mNextFree = &mPool[0];
+	}
+
+	MemoryPool(const MemoryPool&) = delete;
+
+	MemoryPool(MemoryPool&& other) noexcept
+		: mPool{ std::move(other.mPool) }
+		, mNextFree{ other.mNextFree }
+	{
+		other.mNextFree = nullptr;
+	}
+
+	~MemoryPool() = default;
+
+	T* allocate()
+	{
+		if (mNextFree == nullptr)
+			throw std::bad_alloc{};
+
+		const auto item = mNextFree;
+		mNextFree = item->mNext;
+
+		return reinterpret_cast<T*>(&item->mStorage);
+	}
+
+	void deallocate(T* p) noexcept
+	{
+		const auto item = reinterpret_cast<Item*>(p);
+
+		item->mNext = mNextFree;
+		mNextFree = item;
+	}
+
+	template<class ...Args>
+	T* acquire(Args&& ...args)
+	{
+		return new (allocate()) T(std::forward<Args>(args)...);
+	}
+
+	void release(T* p) noexcept
+	{
+		if (p == nullptr)
+			return;
+
+		p->~T();
+		deallocate(p);
+	}
+
+	MemoryPool& operator =(const MemoryPool&) = delete;
+
+	MemoryPool& operator =(MemoryPool&& other) noexcept
+	{
+		if (this == &other)
+			return *this;
+
+		mPool = std::move(other.mPool);
+		mNextFree = other.mNextFree;
+
+		other.mNextFree = nullptr;
+
+		return *this;
+	}
+
+private:
+	struct Item
+	{
+		std::aligned_storage_t<sizeof(T), alignof(T)> mStorage;
+		Item* mNext;
+	};
+
+	std::unique_ptr<Item[]> mPool = std::make_unique<Item[]>(SIZE);
+	Item* mNextFree = nullptr;
+};
+
+
+class Timer
+{
+public:
+	Timer() = default;
+
+	~Timer()
+	{
+	}
+
+	void ReStart()
+	{
+		mClock = clock();
+	}
+
+	int ElapsedMSec()
+	{
+		return difftime(clock(), mClock);
+	}
+
+private:
+	clock_t mClock;
+};
+
+struct TestItem
+{
+public:
+	int value = 0;
+};
+
+void main()
+{
+	Timer timer;
+	MemoryPool<TestItem> pool;
+
+	int loopCount = 1000000;
+
+	timer.ReStart();
+	for (auto i = 0; i < loopCount; ++i)
+	{
+		auto item = new TestItem();
+		delete item;
+	}
+	std::cout << "NO_USE_POOL Elased: " << timer.ElapsedMSec() << "ms" << std::endl;
+
+	timer.ReStart();
+	for (auto i = 0; i < loopCount; ++i)
+	{
+		auto item = pool.acquire();
+
+		pool.release(item);
+	}
+	std::cout << "USE POOL Elased: " << timer.ElapsedMSec() << "ms" << std::endl;
 }
-
-// 프로그램 실행: <Ctrl+F5> 또는 [디버그] > [디버깅하지 않고 시작] 메뉴
-// 프로그램 디버그: <F5> 키 또는 [디버그] > [디버깅 시작] 메뉴
-
-// 시작을 위한 팁: 
-//   1. [솔루션 탐색기] 창을 사용하여 파일을 추가/관리합니다.
-//   2. [팀 탐색기] 창을 사용하여 소스 제어에 연결합니다.
-//   3. [출력] 창을 사용하여 빌드 출력 및 기타 메시지를 확인합니다.
-//   4. [오류 목록] 창을 사용하여 오류를 봅니다.
-//   5. [프로젝트] > [새 항목 추가]로 이동하여 새 코드 파일을 만들거나, [프로젝트] > [기존 항목 추가]로 이동하여 기존 코드 파일을 프로젝트에 추가합니다.
-//   6. 나중에 이 프로젝트를 다시 열려면 [파일] > [열기] > [프로젝트]로 이동하고 .sln 파일을 선택합니다.
