@@ -4,61 +4,61 @@ template<class T>
 class MemoryPool
 {
 public:
-	const static std::size_t SIZE = 100000;
+	const static std::size_t POOL_SIZE = 100000;
 
 	MemoryPool()
 	{
-		for (auto i = 1; i < SIZE; ++i)
+		for (auto i = 1; i < POOL_SIZE; ++i)
 		{
-			mPool[i - 1].mNext = &mPool[i];
+			m_pool[i - 1].m_next = &m_pool[i];
 		}
 
-		mNextFree = &mPool[0];
+		m_next_free = &m_pool[0];
 	}
 
 	MemoryPool(const MemoryPool&) = delete;
 
 	MemoryPool(MemoryPool&& other) noexcept
-		: mPool{ std::move(other.mPool) }
-		, mNextFree{ other.mNextFree }
+		: m_pool{ std::move(other.m_pool) }
+		, m_next_free{ other.m_next_free }
 	{
-		other.mNextFree = nullptr;
+		other.m_next_free = nullptr;
 	}
 
 	~MemoryPool() = default;
 
-	T* allocate()
+	T* Allocate()
 	{
-		if (mNextFree == nullptr)
+		if (m_next_free == nullptr)
 			throw std::bad_alloc{};
 
-		const auto item = mNextFree;
-		mNextFree = item->mNext;
+		const auto item = m_next_free;
+		m_next_free = item->m_next;
 
-		return reinterpret_cast<T*>(&item->mStorage);
+		return reinterpret_cast<T*>(&item->m_storage);
 	}
 
-	void deallocate(T* p) noexcept
+	void Deallocate(T* p) noexcept
 	{
 		const auto item = reinterpret_cast<Item*>(p);
 
-		item->mNext = mNextFree;
-		mNextFree = item;
+		item->m_next = m_next_free;
+		m_next_free = item;
 	}
 
 	template<class ...Args>
-	T* acquire(Args&& ...args)
+	T* Acquire(Args&& ...args)
 	{
-		return new (allocate()) T(std::forward<Args>(args)...);
+		return new (Allocate()) T(std::forward<Args>(args)...);
 	}
 
-	void release(T* p) noexcept
+	void Release(T* p) noexcept
 	{
 		if (p == nullptr)
 			return;
 
 		p->~T();
-		deallocate(p);
+		Deallocate(p);
 	}
 
 	MemoryPool& operator =(const MemoryPool&) = delete;
@@ -68,10 +68,10 @@ public:
 		if (this == &other)
 			return *this;
 
-		mPool = std::move(other.mPool);
-		mNextFree = other.mNextFree;
+		m_pool = std::move(other.m_pool);
+		m_next_free = other.m_next_free;
 
-		other.mNextFree = nullptr;
+		other.m_next_free = nullptr;
 
 		return *this;
 	}
@@ -79,12 +79,12 @@ public:
 private:
 	struct Item
 	{
-		std::aligned_storage_t<sizeof(T), alignof(T)> mStorage;
-		Item* mNext;
+		std::aligned_storage_t<sizeof(T), alignof(T)> m_storage;
+		Item* m_next;
 	};
 
-	std::unique_ptr<Item[]> mPool = std::make_unique<Item[]>(SIZE);
-	Item* mNextFree = nullptr;
+	std::unique_ptr<Item[]> m_pool = std::make_unique<Item[]>(POOL_SIZE);
+	Item* m_next_free = nullptr;
 };
 
 
@@ -99,16 +99,16 @@ public:
 
 	void ReStart()
 	{
-		mClock = clock();
+		m_clock = clock();
 	}
 
 	int ElapsedMSec()
 	{
-		return difftime(clock(), mClock);
+		return difftime(clock(), m_clock);
 	}
 
 private:
-	clock_t mClock;
+	clock_t m_clock;
 };
 
 struct TestItem
@@ -122,10 +122,10 @@ void main()
 	Timer timer;
 	MemoryPool<TestItem> pool;
 
-	int loopCount = 1000000;
+	int loop_count = 1000000;
 
 	timer.ReStart();
-	for (auto i = 0; i < loopCount; ++i)
+	for (auto i = 0; i < loop_count; ++i)
 	{
 		auto item = new TestItem();
 		delete item;
@@ -133,11 +133,11 @@ void main()
 	std::cout << "NO_USE_POOL Elased: " << timer.ElapsedMSec() << "ms" << std::endl;
 
 	timer.ReStart();
-	for (auto i = 0; i < loopCount; ++i)
+	for (auto i = 0; i < loop_count; ++i)
 	{
-		auto item = pool.acquire();
+		auto item = pool.Acquire();
 
-		pool.release(item);
+		pool.Release(item);
 	}
 	std::cout << "USE POOL Elased: " << timer.ElapsedMSec() << "ms" << std::endl;
 }
